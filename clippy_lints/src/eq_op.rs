@@ -1,7 +1,7 @@
 use clippy_utils::diagnostics::{multispan_sugg, span_lint, span_lint_and_then};
 use clippy_utils::source::snippet;
 use clippy_utils::ty::{implements_trait, is_copy};
-use clippy_utils::{ast_utils::is_useless_with_eq_exprs, eq_expr_value, higher, in_macro, is_expn_of};
+use clippy_utils::{ast_utils::is_useless_with_eq_exprs, eq_expr_value, higher, in_macro, is_expn_of, is_in_test_function};
 use if_chain::if_chain;
 use rustc_errors::Applicability;
 use rustc_hir::{BinOpKind, BorrowKind, Expr, ExprKind, StmtKind};
@@ -72,23 +72,25 @@ impl<'tcx> LateLintPass<'tcx> for EqOp {
     #[allow(clippy::similar_names, clippy::too_many_lines)]
     fn check_expr(&mut self, cx: &LateContext<'tcx>, e: &'tcx Expr<'_>) {
         if let ExprKind::Block(block, _) = e.kind {
-            for stmt in block.stmts {
-                for amn in &ASSERT_MACRO_NAMES {
-                    if_chain! {
-                        if is_expn_of(stmt.span, amn).is_some();
-                        if let StmtKind::Semi(matchexpr) = stmt.kind;
-                        if let Some(macro_args) = higher::extract_assert_macro_args(matchexpr);
-                        if macro_args.len() == 2;
-                        let (lhs, rhs) = (macro_args[0], macro_args[1]);
-                        if eq_expr_value(cx, lhs, rhs);
+            if !is_in_test_function(cx.tcx, e.hir_id) {
+                for stmt in block.stmts {
+                    for amn in &ASSERT_MACRO_NAMES {
+                        if_chain! {
+                            if is_expn_of(stmt.span, amn).is_some();
+                            if let StmtKind::Semi(matchexpr) = stmt.kind;
+                            if let Some(macro_args) = higher::extract_assert_macro_args(matchexpr);
+                            if macro_args.len() == 2;
+                            let (lhs, rhs) = (macro_args[0], macro_args[1]);
+                            if eq_expr_value(cx, lhs, rhs);
 
-                        then {
-                            span_lint(
-                                cx,
-                                EQ_OP,
-                                lhs.span.to(rhs.span),
-                                &format!("identical args used in this `{}!` macro call", amn),
-                            );
+                            then {
+                                span_lint(
+                                    cx,
+                                    EQ_OP,
+                                    lhs.span.to(rhs.span),
+                                    &format!("identical args used in this `{}!` macro call", amn),
+                                );
+                            }
                         }
                     }
                 }
@@ -108,7 +110,10 @@ impl<'tcx> LateLintPass<'tcx> for EqOp {
             if macro_with_not_op(&left.kind) || macro_with_not_op(&right.kind) {
                 return;
             }
-            if is_useless_with_eq_exprs(op.node.into()) && eq_expr_value(cx, left, right) {
+            if is_useless_with_eq_exprs(op.node.into())
+                && !is_in_test_function(cx.tcx, e.hir_id)
+                && eq_expr_value(cx, left, right)
+            {
                 span_lint(
                     cx,
                     EQ_OP,

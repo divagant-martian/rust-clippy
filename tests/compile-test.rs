@@ -149,6 +149,14 @@ fn run_ui(cfg: &mut compiletest::Config) {
     compiletest::run_tests(cfg);
 }
 
+fn run_ui_test(cfg: &mut compiletest::Config) {
+    cfg.mode = TestMode::Ui;
+    cfg.src_base = Path::new("tests").join("ui_test");
+    let _g = VarGuard::set("CARGO_MANIFEST_DIR", std::fs::canonicalize("tests").unwrap());
+    cfg.target_rustcflags.get_or_insert_with(Default::default).push_str(" --test");
+    compiletest::run_tests(cfg);
+}
+
 fn run_internal_tests(cfg: &mut compiletest::Config) {
     // only run internal tests with the internal-tests feature
     if !RUN_INTERNAL_TESTS {
@@ -312,6 +320,7 @@ fn compile_test() {
     prepare_env();
     let mut config = default_config();
     run_ui(&mut config);
+    run_ui_test(&mut config);
     run_ui_toml(&mut config);
     run_ui_cargo(&mut config);
     run_internal_tests(&mut config);

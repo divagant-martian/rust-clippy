@@ -2064,16 +2064,25 @@ pub fn is_hir_ty_cfg_dependant(cx: &LateContext<'_>, ty: &hir::Ty<'_>) -> bool {
     false
 }
 
+/// Checks if the HirId belongs to a function annotated with the `#[test]` attribute
+pub fn is_test_function(tcx: TyCtxt<'_>, fn_id: HirId) -> bool {
+    if let Some(def_id) = tcx.hir().opt_local_def_id(fn_id) {
+        return tcx.has_attr(def_id.to_def_id(), sym::test);
+    }
+    false
+}
+
+/// Checks if the node this HirId identifies is in a function annotated with `#[test]`
+pub fn is_in_test_function(tcx: TyCtxt<'_>, elem_id: HirId) -> bool {
+    is_test_function(tcx, tcx.hir().get_parent_item(elem_id))
+}
+
 /// Checks whether item either has `test` attribute applied, or
 /// is a module with `test` in its name.
 pub fn is_test_module_or_function(tcx: TyCtxt<'_>, item: &Item<'_>) -> bool {
-    if let Some(def_id) = tcx.hir().opt_local_def_id(item.hir_id()) {
-        if tcx.has_attr(def_id.to_def_id(), sym::test) {
-            return true;
-        }
-    }
-
-    matches!(item.kind, ItemKind::Mod(..)) && item.ident.name.as_str().split('_').any(|a| a == "test" || a == "tests")
+    is_test_function(tcx, item.hir_id())
+        || matches!(item.kind, ItemKind::Mod(..))
+            && item.ident.name.as_str().split('_').any(|a| a == "test" || a == "tests")
 }
 
 macro_rules! op_utils {
